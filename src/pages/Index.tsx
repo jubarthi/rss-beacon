@@ -5,16 +5,39 @@ import Footer from "@/components/Footer";
 import NewsCard from "@/components/NewsCard";
 import { Card } from "@/components/ui/card";
 import { fetchNews, getCachedNews, setCachedNews, type NewsItem } from "@/lib/rssService";
+import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+
+interface CustomNews {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string | null;
+  link: string;
+  signature: string;
+  published_at: string;
+}
 
 const Index = () => {
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [customNews, setCustomNews] = useState<CustomNews[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
     const loadNews = async () => {
-      // Try cache first
+      // Load custom news from database
+      const { data: customData } = await supabase
+        .from("custom_news")
+        .select("*")
+        .order("published_at", { ascending: false })
+        .limit(2);
+      
+      if (customData) {
+        setCustomNews(customData);
+      }
+
+      // Try cache first for RSS news
       const cached = getCachedNews();
       if (cached && cached.length > 0) {
         setNews(cached);
@@ -22,7 +45,7 @@ const Index = () => {
         return;
       }
 
-      // Fetch fresh data
+      // Fetch fresh RSS data
       try {
         const freshNews = await fetchNews();
         setNews(freshNews);
@@ -123,25 +146,40 @@ const Index = () => {
                   </Card>
                 ))}
               </div>
-            ) : news.length > 0 ? (
+            ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {news.map((item, index) => (
+                {/* Custom News */}
+                {customNews.map((item) => (
                   <NewsCard
-                    key={index}
+                    key={item.id}
                     title={item.title}
                     description={item.description}
-                    source={item.source}
-                    date={item.pubDate}
+                    source={item.signature}
+                    date={new Date(item.published_at).toLocaleDateString('pt-BR')}
                     link={item.link}
                   />
                 ))}
+                
+                {/* RSS News */}
+                {news.length > 0 ? (
+                  news.map((item, index) => (
+                    <NewsCard
+                      key={index}
+                      title={item.title}
+                      description={item.description}
+                      source={item.source}
+                      date={item.pubDate}
+                      link={item.link}
+                    />
+                  ))
+                ) : customNews.length === 0 ? (
+                  <Card className="p-12 text-center col-span-full">
+                    <p className="text-muted-foreground">
+                      Não foi possível carregar notícias no momento. Por favor, tente novamente mais tarde.
+                    </p>
+                  </Card>
+                ) : null}
               </div>
-            ) : (
-              <Card className="p-12 text-center">
-                <p className="text-muted-foreground">
-                  Não foi possível carregar notícias no momento. Por favor, tente novamente mais tarde.
-                </p>
-              </Card>
             )}
           </div>
         </div>
